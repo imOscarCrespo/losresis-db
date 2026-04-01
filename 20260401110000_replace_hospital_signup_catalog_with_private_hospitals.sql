@@ -209,3 +209,4 @@ grant all on table public.hospitals_private to service_role;
 
 drop table if exists public.employer_org_signup_hospital;
 drop table if exists public.hospital_signup_catalog;
+drop function if exists public.set_updated_at_timestamp_hospital_signup_catalog();
