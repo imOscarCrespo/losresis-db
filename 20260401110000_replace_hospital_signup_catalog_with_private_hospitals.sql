@@ -148,17 +148,53 @@ alter table public.employer_org
   add column if not exists hospital_id uuid references public.hospitals(id),
   add column if not exists hospital_private_id uuid references public.hospitals_private(id);
 
-update public.employer_org eo
-set
-  ownership_type = eosh.ownership_type,
-  hospital_id = eosh.hospital_id,
-  hospital_private_id = hp.id
-from public.employer_org_signup_hospital eosh
-left join public.hospital_signup_catalog hsc
-  on hsc.id = eosh.hospital_catalog_id
-left join public.hospitals_private hp
-  on hp.codcnh = hsc.codcnh
-where eosh.org_id = eo.id;
+do $$
+declare
+  has_legacy_public_hospital_id boolean;
+begin
+  select exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'employer_org_signup_hospital'
+      and column_name = 'hospital_id'
+  ) into has_legacy_public_hospital_id;
+
+  if has_legacy_public_hospital_id then
+    execute $sql$
+      update public.employer_org eo
+      set
+        ownership_type = case
+          when eosh.hospital_id is not null then 'public'
+          when hp.id is not null then 'private'
+          else eo.ownership_type
+        end,
+        hospital_id = eosh.hospital_id,
+        hospital_private_id = hp.id
+      from public.employer_org_signup_hospital eosh
+      left join public.hospital_signup_catalog hsc
+        on hsc.id = eosh.hospital_catalog_id
+      left join public.hospitals_private hp
+        on hp.codcnh = hsc.codcnh
+      where eosh.org_id = eo.id
+    $sql$;
+  else
+    update public.employer_org eo
+    set
+      ownership_type = case
+        when hp.id is not null then 'private'
+        else eo.ownership_type
+      end,
+      hospital_id = eo.hospital_id,
+      hospital_private_id = hp.id
+    from public.employer_org_signup_hospital eosh
+    left join public.hospital_signup_catalog hsc
+      on hsc.id = eosh.hospital_catalog_id
+    left join public.hospitals_private hp
+      on hp.codcnh = hsc.codcnh
+    where eosh.org_id = eo.id;
+  end if;
+end $$;
 
 do $$
 begin
